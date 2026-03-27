@@ -16,7 +16,8 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
   const [eraserSize, setEraserSize] = useState(20);
   const [selectedEmoji, setSelectedEmoji] = useState('😀');
   const [cursors, setCursors] = useState({});
-  const [usersCount, setUsersCount] = useState(1);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [showUsersList, setShowUsersList] = useState(false);
   
   // Undo/Redo history
   const historyRef = useRef([]);
@@ -91,7 +92,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
     };
 
     const handleUsersUpdate = (users) => {
-      setUsersCount(users.length);
+      setOnlineUsers(users);
     };
 
     const handleCursorMove = (cursorData) => {
@@ -469,12 +470,6 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       
       {/* Top right floating badges */}
       <div className="absolute top-6 right-6 flex items-center gap-2 z-40">
-        {/* Users badge */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full glass text-sm font-semibold">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
-          <Users size={14} className="opacity-60" />
-          <span>{usersCount}</span>
-        </div>
 
         {/* Theme Toggle */}
         <button
@@ -503,13 +498,47 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         <canvas ref={canvasRef} />
       </div>
 
-      {/* Room Badge */}
+      {/* Room Badge - Bottom Left */}
       <div className="absolute bottom-6 left-6 z-40">
         <div className="flex items-center gap-2 px-4 py-2 rounded-2xl glass text-xs font-semibold">
           <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: userColor }}></div>
           <span className="opacity-60">Room:</span>
           <span className="font-mono font-bold tracking-wider">{roomId}</span>
         </div>
+      </div>
+
+      {/* Online Users List - Bottom Right */}
+      <div className="absolute bottom-6 right-6 z-40 flex flex-col items-end gap-3">
+        {showUsersList && (
+          <div className="glass p-3 rounded-2xl min-w-[200px] mb-2 animate-in slide-in-from-bottom-2 duration-200">
+            <h3 className="text-xs font-bold uppercase tracking-widest opacity-40 mb-3 px-1">Online Users</h3>
+            <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
+              {onlineUsers.map((user, idx) => (
+                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/10 transition-colors">
+                  <div 
+                    className="w-2.5 h-2.5 rounded-full shadow-sm" 
+                    style={{ backgroundColor: user.color || '#fff' }}
+                  ></div>
+                  <span className="text-sm font-medium opacity-80">{user.username} {user.username === username ? '(You)' : ''}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        <button
+          onClick={() => setShowUsersList(!showUsersList)}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-lg ${showUsersList ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-white/20' : ''}`}
+        >
+          <div className="relative">
+            <Users size={20} className={showUsersList ? 'text-indigo-400' : 'opacity-70'} />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white/20 animate-pulse"></span>
+          </div>
+          <span className="tracking-tight">Online</span>
+          <div className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-lg bg-white/10 text-[11px] font-black">
+            {onlineUsers.length}
+          </div>
+        </button>
       </div>
     </div>
   );
