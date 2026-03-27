@@ -3,28 +3,34 @@ import * as fabric from 'fabric';
 import { socket } from '../lib/socket';
 import Toolbar from './Toolbar';
 import LiveCursors from './LiveCursors';
-import { LogOut, Sun, Moon, Users, Download as DLIcon } from 'lucide-react';
+import { LogOut, Sun, Moon, Users } from 'lucide-react';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-export default function Whiteboard({ roomId, username, userColor, darkMode, toggleTheme }) {
-  const canvasRef = useRef(null);
-  const [canvas, setCanvas] = useState(null);
+interface WhiteboardProps {
+  roomId: string;
+  username: string;
+  userColor: string;
+  darkMode: boolean;
+  toggleTheme: () => void;
+}
+
+export default function Whiteboard({ roomId, username, userColor, darkMode, toggleTheme }: WhiteboardProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvas, setCanvas] = useState<fabric.Canvas | null>(null);
   const [currentTool, setCurrentTool] = useState('pen');
   const [color, setColor] = useState('#ef4444');
   const [brushSize, setBrushSize] = useState(4);
   const [eraserSize, setEraserSize] = useState(20);
   const [selectedEmoji, setSelectedEmoji] = useState('😀');
-  const [cursors, setCursors] = useState({});
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [cursors, setCursors] = useState<Record<string, any>>({});
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
   const [showUsersList, setShowUsersList] = useState(false);
   
-  // Undo/Redo history
-  const historyRef = useRef([]);
+  const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const isSyncingRef = useRef(false);
 
-  // Initialize canvas
   useEffect(() => {
     if (!canvasRef.current) return;
 
@@ -32,12 +38,11 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       width: window.innerWidth,
       height: window.innerHeight,
       isDrawingMode: true,
-      backgroundColor: darkMode ? '#111827' : '#f9fafb', // matches tailwind standard background
+      backgroundColor: darkMode ? '#111827' : '#f9fafb',
     });
 
     setCanvas(fabricCanvas);
 
-    // Save initial blank state
     historyRef.current = [JSON.stringify(fabricCanvas.toJSON(['id']))];
     historyIndexRef.current = 0;
 
@@ -53,9 +58,8 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       window.removeEventListener('resize', handleResize);
       fabricCanvas.dispose();
     };
-  }, []); // Run once on mount
+  }, []);
 
-  // Update canvas background when dark mode changes
   useEffect(() => {
     if (canvas) {
       canvas.backgroundColor = darkMode ? '#111827' : '#f9fafb';
@@ -63,17 +67,15 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
     }
   }, [darkMode, canvas]);
 
-  // Handle Socket events
   useEffect(() => {
     if (!canvas) return;
 
-    const handleCanvasState = async (stateStr) => {
+    const handleCanvasState = async (stateStr: string) => {
       if (!stateStr) return;
       isSyncingRef.current = true;
       try {
           await canvas.loadFromJSON(stateStr);
           canvas.requestRenderAll();
-          // Update history
           historyRef.current = [stateStr];
           historyIndexRef.current = 0;
       } catch (e) { console.error('Error loading JSON state', e); }
@@ -91,18 +93,18 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       isSyncingRef.current = false;
     };
 
-    const handleUsersUpdate = (users) => {
+    const handleUsersUpdate = (users: any[]) => {
       setOnlineUsers(users);
     };
 
-    const handleCursorMove = (cursorData) => {
+    const handleCursorMove = (cursorData: any) => {
       setCursors((prev) => ({
         ...prev,
         [cursorData.socketId]: cursorData,
       }));
     };
 
-    const handleUserLeft = (socketId) => {
+    const handleUserLeft = (socketId: string) => {
       setCursors((prev) => {
         const next = { ...prev };
         delete next[socketId];
@@ -125,34 +127,25 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
     };
   }, [canvas, darkMode]);
 
-  // Handle drawing & broadcasting state updates
   useEffect(() => {
     if (!canvas) return;
 
     const saveState = () => {
       if (isSyncingRef.current) return;
-      
       const json = JSON.stringify(canvas.toJSON(['id']));
-      
-      // Add to history
       const nextIndex = historyIndexRef.current + 1;
       const nextHistory = historyRef.current.slice(0, nextIndex);
       nextHistory.push(json);
       historyRef.current = nextHistory;
       historyIndexRef.current = nextIndex;
-
-      // Broadcast
       socket.emit('save_canvas_state', { roomId, state: json });
-      socket.emit('undo_redo_sync', { roomId, state: json }); // broadcast to others
+      socket.emit('undo_redo_sync', { roomId, state: json });
     };
 
-    // Only save state on actions that are 'completed'
     canvas.on('path:created', saveState);
     canvas.on('object:modified', saveState);
     canvas.on('object:removed', saveState);
-    canvas.on('object:added', (e) => {
-      // path:created already fires object:added, so we need to avoid double saving for paths.
-      // But we need object:added for shapes.
+    canvas.on('object:added', (e: any) => {
       if (!isSyncingRef.current && e.target && e.target.type !== 'path') {
          saveState();
       }
@@ -166,22 +159,18 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
     };
   }, [canvas, roomId]);
 
-  // Local interaction: Draw Shapes/Text based on Tool
   useEffect(() => {
     if (!canvas) return;
 
     let isDown = false;
     let startX = 0;
     let startY = 0;
-    let currentShape = null;
+    let currentShape: any = null;
 
     canvas.isDrawingMode = currentTool === 'pen' || currentTool === 'dash' || currentTool === 'eraser' || currentTool === 'highlighter';
-    
-    // Core interaction behaviors
     canvas.selection = currentTool === 'select';
     canvas.skipTargetFind = currentTool !== 'select' && currentTool !== 'eraser_object';
     
-    // Dynamic Cursor Generation
     let cursorStyle = 'default';
     if (currentTool === 'select') {
       cursorStyle = 'default';
@@ -193,15 +182,11 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><text y="40" font-size="36">${selectedEmoji}</text></svg>`;
        cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") 24 24, crosshair`;
     } else if (['pen', 'dash', 'highlighter', 'eraser'].includes(currentTool)) {
-       // Make brush size responsive
        const sizeMultiplier = currentTool === 'highlighter' ? 3 : 1;
        const rawSize = currentTool === 'eraser' ? eraserSize : (brushSize * sizeMultiplier);
-       // Ensure minimum visible size
        const cSize = Math.max(rawSize, 4);
-       
        let fill = encodeURIComponent(color);
        let stroke = 'rgba(0,0,0,0.5)';
-       
        if (currentTool === 'eraser') {
          fill = 'rgba(255,255,255,0.7)';
          stroke = 'black';
@@ -211,7 +196,6 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
        } else {
          stroke = 'rgba(0,0,0,0.2)';
        }
-       
        const boxSize = cSize + 4;
        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${boxSize}" height="${boxSize}"><circle cx="${boxSize/2}" cy="${boxSize/2}" r="${cSize/2}" fill="${fill}" stroke="${stroke}" stroke-width="1" /></svg>`;
        cursorStyle = `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") ${boxSize/2} ${boxSize/2}, crosshair`;
@@ -220,22 +204,16 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
     canvas.defaultCursor = cursorStyle;
     canvas.hoverCursor = cursorStyle;
     
-    // Configure brushes
     if (canvas.isDrawingMode) {
       if (!canvas.freeDrawingBrush) {
-        // v7 uses fabric.PencilBrush
         canvas.freeDrawingBrush = new fabric.PencilBrush(canvas);
       }
-      
-      // Reset stroke dash array by default
       canvas.freeDrawingBrush.strokeDashArray = null;
-      
       if (currentTool === 'eraser') {
         canvas.freeDrawingBrush.color = darkMode ? '#111827' : '#f9fafb';
         canvas.freeDrawingBrush.width = eraserSize;
       } else if (currentTool === 'highlighter') {
-        // Semi-transparent color for highlighter
-        const hexToRgba = (hex, alpha) => {
+        const hexToRgba = (hex: string, alpha: number) => {
           const r = parseInt(hex.slice(1, 3), 16);
           const g = parseInt(hex.slice(3, 5), 16);
           const b = parseInt(hex.slice(5, 7), 16);
@@ -253,7 +231,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       }
     }
 
-    const onMouseDown = (o) => {
+    const onMouseDown = (o: any) => {
       if (currentTool === 'eraser_object') {
         if (o.target) {
           canvas.remove(o.target);
@@ -262,96 +240,68 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         }
         return;
       }
-
       if (canvas.isDrawingMode) return;
-      
-      // Fabric v7 provides scenePoint on the event object
-      const pointer = typeof canvas.getScenePoint === 'function' ? canvas.getScenePoint(o.e) : (o.scenePoint || canvas.getPointer(o.e));
+      const pointer = typeof (canvas as any).getScenePoint === 'function' ? (canvas as any).getScenePoint(o.e) : (o.scenePoint || canvas.getPointer(o.e));
       isDown = true;
       startX = pointer.x;
       startY = pointer.y;
 
       if (currentTool === 'rect') {
         currentShape = new fabric.Rect({
-          left: startX,
-          top: startY,
-          width: 0,
-          height: 0,
-          fill: 'transparent',
-          stroke: color,
-          strokeWidth: brushSize,
+          left: startX, top: startY, width: 0, height: 0,
+          fill: 'transparent', stroke: color, strokeWidth: brushSize,
           id: generateId()
-        });
+        } as any);
         canvas.add(currentShape);
       } else if (currentTool === 'circle') {
         currentShape = new fabric.Circle({
-          left: startX,
-          top: startY,
-          radius: 0,
-          fill: 'transparent',
-          stroke: color,
-          strokeWidth: brushSize,
+          left: startX, top: startY, radius: 0,
+          fill: 'transparent', stroke: color, strokeWidth: brushSize,
           id: generateId()
-        });
+        } as any);
         canvas.add(currentShape);
       } else if (currentTool === 'triangle') {
         currentShape = new fabric.Triangle({
-          left: startX,
-          top: startY,
-          width: 0,
-          height: 0,
-          fill: 'transparent',
-          stroke: color,
-          strokeWidth: brushSize,
+          left: startX, top: startY, width: 0, height: 0,
+          fill: 'transparent', stroke: color, strokeWidth: brushSize,
           id: generateId()
-        });
+        } as any);
         canvas.add(currentShape);
       } else if (currentTool === 'line') {
         currentShape = new fabric.Line([startX, startY, startX, startY], {
-          stroke: color,
-          strokeWidth: brushSize,
+          stroke: color, strokeWidth: brushSize,
           id: generateId()
-        });
+        } as any);
         canvas.add(currentShape);
       } else if (currentTool === 'text') {
          const text = new fabric.IText('Type here...', {
-            left: startX,
-            top: startY,
-            fill: color,
-            fontSize: brushSize * 4,
-            fontFamily: 'Inter',
+            left: startX, top: startY, fill: color,
+            fontSize: brushSize * 4, fontFamily: 'Inter',
             id: generateId()
-         });
+         } as any);
          canvas.add(text);
          canvas.setActiveObject(text);
          text.enterEditing();
          text.selectAll();
-         isDown = false; // text is placed
+         isDown = false;
       } else if (currentTool === 'emoji') {
          const emoji = new fabric.IText(selectedEmoji, {
-            left: startX,
-            top: startY,
-            fontSize: brushSize * 10,
-            id: generateId(),
-            selectable: true,
-         });
+            left: startX, top: startY, fontSize: brushSize * 10,
+            id: generateId(), selectable: true,
+         } as any);
          canvas.add(emoji);
          canvas.setActiveObject(emoji);
          isDown = false;
       }
     };
 
-    const onMouseMove = (o) => {
-      // Emit cursor position
-      const pointer = typeof canvas.getScenePoint === 'function' ? canvas.getScenePoint(o.e) : (o.scenePoint || canvas.getPointer(o.e));
+    const onMouseMove = (o: any) => {
+      const pointer = typeof (canvas as any).getScenePoint === 'function' ? (canvas as any).getScenePoint(o.e) : (o.scenePoint || canvas.getPointer(o.e));
       socket.emit('cursor_move', { roomId, pointer });
-
       if (!isDown || canvas.isDrawingMode || currentTool === 'text' || currentTool === 'emoji' || currentTool === 'eraser_object') return;
-      
       if (currentTool === 'rect' && currentShape) {
         currentShape.set({
-          width: Math.abs(pointer.x - startX),
-          height: Math.abs(pointer.y - startY),
+          width: Math.abs(pointer.x - startX), height: Math.abs(pointer.y - startY),
           left: pointer.x < startX ? pointer.x : startX,
           top: pointer.y < startY ? pointer.y : startY
         });
@@ -364,8 +314,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         });
       } else if (currentTool === 'triangle' && currentShape) {
         currentShape.set({
-          width: Math.abs(pointer.x - startX),
-          height: Math.abs(pointer.y - startY),
+          width: Math.abs(pointer.x - startX), height: Math.abs(pointer.y - startY),
           left: pointer.x < startX ? pointer.x : startX,
           top: pointer.y < startY ? pointer.y : startY
         });
@@ -379,8 +328,8 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       if (canvas.isDrawingMode) return;
       isDown = false;
       if (currentShape) {
-         currentShape.setCoords(); // update bounds
-         canvas.fire('object:modified', { target: currentShape }); // Force a saveState for sync
+         currentShape.setCoords();
+         canvas.fire('object:modified', { target: currentShape });
          currentShape = null;
       }
     };
@@ -397,6 +346,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
   }, [canvas, currentTool, color, brushSize, eraserSize, selectedEmoji, darkMode, roomId]);
 
   const handleUndo = useCallback(async () => {
+    if (!canvas) return;
     if (historyIndexRef.current > 0) {
       historyIndexRef.current -= 1;
       const state = historyRef.current[historyIndexRef.current];
@@ -404,7 +354,6 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       try {
         await canvas.loadFromJSON(state);
         canvas.requestRenderAll();
-        // Broadcast to others
         socket.emit('undo_redo_sync', { roomId, state });
       } catch (e) { console.error('Undo failed', e); }
       finally { isSyncingRef.current = false; }
@@ -412,6 +361,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
   }, [canvas, roomId]);
 
   const handleRedo = useCallback(async () => {
+    if (!canvas) return;
     if (historyIndexRef.current < historyRef.current.length - 1) {
       historyIndexRef.current += 1;
       const state = historyRef.current[historyIndexRef.current];
@@ -419,7 +369,6 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
       try {
         await canvas.loadFromJSON(state);
         canvas.requestRenderAll();
-        // Broadcast to others
         socket.emit('undo_redo_sync', { roomId, state });
       } catch (e) { console.error('Redo failed', e); }
       finally { isSyncingRef.current = false; }
@@ -427,6 +376,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
   }, [canvas, roomId]);
 
   const handleClear = () => {
+    if (!canvas) return;
     if (window.confirm('Are you sure you want to clear the board?')) {
       canvas.clear();
       canvas.backgroundColor = darkMode ? '#111827' : '#f9fafb';
@@ -438,7 +388,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
 
   const handleDownload = () => {
     if (!canvas) return;
-    const dataURL = canvas.toDataURL({ format: 'png', quality: 1 });
+    const dataURL = canvas.toDataURL({ multiplier: 1 });
     const link = document.createElement('a');
     link.href = dataURL;
     link.download = `whiteboard-${roomId}.png`;
@@ -446,7 +396,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
   };
 
   const leaveRoom = () => {
-    window.location.reload(); // Simple way to reset state and disconnect
+    window.location.reload();
   };
 
   return (
@@ -468,10 +418,7 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         onDownload={handleDownload}
       />
       
-      {/* Top right floating badges */}
       <div className="absolute top-6 right-6 flex items-center gap-2 z-40">
-
-        {/* Theme Toggle */}
         <button
           onClick={toggleTheme}
           className="p-2 rounded-full glass hover:scale-105 transition-all"
@@ -482,7 +429,6 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
             : <Moon size={18} className="text-indigo-500" />}
         </button>
         
-        {/* Leave Room */}
         <button 
           onClick={leaveRoom}
           className="p-2 rounded-full glass hover:bg-red-50 dark:hover:bg-red-900/30 text-red-400 hover:text-red-600 hover:scale-105 transition-all"
@@ -498,28 +444,26 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         <canvas ref={canvasRef} />
       </div>
 
-      {/* Room Badge - Bottom Left */}
       <div className="absolute bottom-6 left-6 z-40">
-        <div className="flex items-center gap-2 px-4 py-2 rounded-2xl glass text-xs font-semibold">
+        <div className="flex items-center gap-2 px-4 py-2 rounded-2xl glass text-xs font-semibold text-gray-800 dark:text-gray-100">
           <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: userColor }}></div>
-          <span className="opacity-60">Room:</span>
+          <span className="opacity-60 text-gray-500 dark:text-gray-400">Room:</span>
           <span className="font-mono font-bold tracking-wider">{roomId}</span>
         </div>
       </div>
 
-      {/* Online Users List - Bottom Right */}
       <div className="absolute bottom-6 right-6 z-40 flex flex-col items-end gap-3">
         {showUsersList && (
           <div className="glass p-3 rounded-2xl min-w-[200px] mb-2 animate-in slide-in-from-bottom-2 duration-200">
-            <h3 className="text-xs font-bold uppercase tracking-widest opacity-40 mb-3 px-1">Online Users</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest opacity-40 mb-3 px-1 text-gray-800 dark:text-gray-100">Online Users</h3>
             <div className="flex flex-col gap-2 max-h-[300px] overflow-y-auto pr-1">
               {onlineUsers.map((user, idx) => (
-                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-white/10 transition-colors">
+                <div key={idx} className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 transition-colors">
                   <div 
-                    className="w-2.5 h-2.5 rounded-full shadow-sm" 
+                    className="w-2.5 h-2.5 rounded-full shadow-sm border border-black/10 dark:border-white/10" 
                     style={{ backgroundColor: user.color || '#fff' }}
                   ></div>
-                  <span className="text-sm font-medium opacity-80">{user.username} {user.username === username ? '(You)' : ''}</span>
+                  <span className="text-sm font-medium opacity-80 text-gray-800 dark:text-gray-100">{user.username} {user.username === username ? '(You)' : ''}</span>
                 </div>
               ))}
             </div>
@@ -528,14 +472,14 @@ export default function Whiteboard({ roomId, username, userColor, darkMode, togg
         
         <button
           onClick={() => setShowUsersList(!showUsersList)}
-          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-lg ${showUsersList ? 'bg-indigo-500/20 text-indigo-400 ring-1 ring-white/20' : ''}`}
+          className={`flex items-center gap-2.5 px-4 py-2.5 rounded-2xl glass font-bold text-sm transition-all hover:scale-105 active:scale-95 shadow-lg text-gray-800 dark:text-gray-100 ${showUsersList ? 'bg-indigo-50 darker:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 ring-1 ring-black/10 dark:ring-white/20' : ''}`}
         >
           <div className="relative">
-            <Users size={20} className={showUsersList ? 'text-indigo-400' : 'opacity-70'} />
-            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white/20 animate-pulse"></span>
+            <Users size={20} className={showUsersList ? 'text-indigo-600 dark:text-indigo-400' : 'opacity-70'} />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white dark:border-[#1e1e2d] animate-pulse"></span>
           </div>
           <span className="tracking-tight">Online</span>
-          <div className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-lg bg-white/10 text-[11px] font-black">
+          <div className="flex items-center justify-center min-w-[22px] h-[22px] px-1.5 rounded-lg bg-black/10 dark:bg-white/10 text-[11px] font-black">
             {onlineUsers.length}
           </div>
         </button>
