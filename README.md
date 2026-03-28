@@ -76,6 +76,3 @@ Collaborative-whiteboard/
 └── README.md
 ```
 
-## 📜 License
-
-MIT
